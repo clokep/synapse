@@ -312,10 +312,10 @@ recommend the use of <code>systemd</code> where available: for information on se
 <h2 id="start-synapse-with-poetry"><a class="header" href="#start-synapse-with-poetry">Start Synapse with Poetry</a></h2>
 <p>The following applies to Synapse installations that have been installed from source using <code>poetry</code>.</p>
 <p>You can start the main Synapse process with Poetry by running the following command:</p>
-<pre><code class="language-console">poetry run synapse_homeserver --config-file [your homeserver.yaml]
+<pre><code class="language-console">poetry run synapse_homeserver --config-path [your homeserver.yaml]
 </code></pre>
 <p>For worker setups, you can run the following command</p>
-<pre><code class="language-console">poetry run synapse_worker --config-file [your homeserver.yaml] --config-file [your worker.yaml]
+<pre><code class="language-console">poetry run synapse_worker --config-path [your homeserver.yaml] --config-path [your worker.yaml]
 </code></pre>
 <h2 id="available-worker-applications"><a class="header" href="#available-worker-applications">Available worker applications</a></h2>
 <h3 id="synapseappgeneric_worker"><a class="header" href="#synapseappgeneric_worker"><code>synapse.app.generic_worker</code></a></h3>
@@ -342,6 +342,8 @@ information.</p>
 ^/_matrix/federation/v1/make_leave/
 ^/_matrix/federation/(v1|v2)/send_join/
 ^/_matrix/federation/(v1|v2)/send_leave/
+^/_matrix/federation/v1/make_knock/
+^/_matrix/federation/v1/send_knock/
 ^/_matrix/federation/(v1|v2)/invite/
 ^/_matrix/federation/v1/event_auth/
 ^/_matrix/federation/v1/timestamp_to_event/
@@ -363,7 +365,7 @@ information.</p>
 ^/_matrix/client/v1/rooms/.*/hierarchy$
 ^/_matrix/client/(v1|unstable)/rooms/.*/relations/
 ^/_matrix/client/v1/rooms/.*/threads$
-^/_matrix/client/unstable/im.nheko.summary/rooms/.*/summary$
+^/_matrix/client/unstable/im.nheko.summary/summary/.*$
 ^/_matrix/client/(r0|v3|unstable)/account/3pid$
 ^/_matrix/client/(r0|v3|unstable)/account/whoami$
 ^/_matrix/client/(r0|v3|unstable)/devices$
@@ -418,6 +420,7 @@ information.</p>
 </code></pre>
 <p>Additionally, the following REST endpoints can be handled for GET requests:</p>
 <pre><code>^/_matrix/client/(api/v1|r0|v3|unstable)/pushrules/
+^/_matrix/client/unstable/org.matrix.msc4140/delayed_events
 </code></pre>
 <p>Pagination requests can also be handled, but all requests for a given
 room must be routed to the same instance. Additionally, care must be taken to
@@ -643,7 +646,7 @@ the stream writer for the <code>presence</code> stream:</p>
 </code></pre>
 <h5 id="the-push_rules-stream"><a class="header" href="#the-push_rules-stream">The <code>push_rules</code> stream</a></h5>
 <p>The following endpoints should be routed directly to the worker configured as
-the stream writer for the <code>push</code> stream:</p>
+the stream writer for the <code>push_rules</code> stream:</p>
 <pre><code>^/_matrix/client/(api/v1|r0|v3|unstable)/pushrules/
 </code></pre>
 <h4 id="restrict-outbound-federation-traffic-to-a-specific-set-of-workers"><a class="header" href="#restrict-outbound-federation-traffic-to-a-specific-set-of-workers">Restrict outbound federation traffic to a specific set of workers</a></h4>
@@ -714,7 +717,7 @@ after setting this option in the shared configuration!</p>
 <p>This style of configuration supersedes the legacy <code>synapse.app.appservice</code>
 worker application type.</p>
 <h4 id="push-notifications"><a class="header" href="#push-notifications">Push Notifications</a></h4>
-<p>You can designate generic worker to sending push notifications to
+<p>You can designate generic workers to send push notifications to
 a <a href="https://spec.matrix.org/v1.5/push-gateway-api/">push gateway</a> such as
 <a href="https://github.com/matrix-org/sygnal">sygnal</a> and email.</p>
 <p>This will stop the main process sending push notifications.</p>
@@ -789,6 +792,8 @@ worker_log_config: /etc/matrix-synapse/federation-sender-log.yaml
 <h3 id="synapseappmedia_repository"><a class="header" href="#synapseappmedia_repository"><code>synapse.app.media_repository</code></a></h3>
 <p>Handles the media repository. It can handle all endpoints starting with:</p>
 <pre><code>/_matrix/media/
+/_matrix/client/v1/media/
+/_matrix/federation/v1/media/
 </code></pre>
 <p>... and the following regular expressions matching media-specific administration APIs:</p>
 <pre><code>^/_synapse/admin/v1/purge_media_cache$
