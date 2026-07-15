@@ -656,9 +656,15 @@ jobs:
         include:
           - python-version: "3.10"
             postgres-version: "14"
+            synapse-postgres-driver: "psycopg2"
 
           - python-version: "3.14"
             postgres-version: "17"
+            synapse-postgres-driver: "psycopg2"
+
+          - python-version: "3.14"
+            postgres-version: "17"
+            synapse-postgres-driver: "psycopg"
 
     services:
       postgres:
@@ -698,6 +704,7 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: postgres
+          SYNAPSE_POSTGRES_DRIVER: ${{ matrix.synapse-postgres-driver }}
       - name: "Upload schema differences"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ failure() && !cancelled() && steps.run_tester_script.outcome == 'failure' }}
