@@ -445,6 +445,7 @@ class LoggingTransaction:
             # suggests that the outer collection may be iterable, but
             # https://docs.python.org/3/library/sqlite3.html?highlight=sqlite3#how-to-use-placeholders-to-bind-values-in-sql-queries
             # suggests that the inner collection should be a sequence or dict.
+            #
             # In the case of psycopg v3+ usage, `executemany()` uses a postgres
             # optimization called pipelining to vastly speed up processing of the query
             # when there are many args.
@@ -485,9 +486,9 @@ class LoggingTransaction:
                 values,
             )
         elif isinstance(self.database_engine, PsycopgEngine):
-            # We use fetch = False to mean a writable query. You *might* be able
-            # to morph that into a COPY (...) FROM STDIN, but it isn't worth the
-            # effort for the few places we set fetch = False.
+            # We use `fetch=False` to mean a writable query. You *might* be able
+            # to morph that into a `COPY (...) FROM STDIN`, but it isn't worth the
+            # effort for the few places we set `fetch=False`.
             assert fetch is True
 
             # For the moment, no code paths in Synapse use `template` with `fetch=True`
@@ -497,7 +498,7 @@ class LoggingTransaction:
 
             # execute_values requires a single replacement, but we need to expand it
             # for COPY. These inner sequences must be the same length.
-            assertion_length = 0
+            assertion_length: int | None = None
             for _inner_value in values:
                 # Check for the Sized class here, to verify that this particular
                 # iterable can use len(). In the future, switch the `values` argument to
@@ -505,31 +506,51 @@ class LoggingTransaction:
                 # types wanted while excluding Generators and this assertion can be
                 # removed.
                 assert isinstance(_inner_value, Sized)
-                if not assertion_length:
+                if assertion_length is None:
                     assertion_length = len(_inner_value)
-                assert assertion_length == len(_inner_value)
+                assert assertion_length == len(_inner_value), (
+                    "Inner value passed that was not the same length as the first "
+                    "value. Please ensure each inner value passed to execute_values() "
+                    f"is the same length. Length: this value({len(_inner_value)}) first "
+                    f"value({assertion_length})"
+                )
 
             # To avoid having to port several psycopg2 utilities that are built into its
-            # Cursor class(mogrify, for example) and import execute_values() from it's
-            # 'extras' module, use a different mechanism that facilitates performance.
+            # Cursor class(like `mogrify`, for example) in order to re-use `from
+            # psycopg2.extras import execute_batch`, use a different mechanism that is
+            # still performant.
             #
             # The COPY Postgres-only verb allows for a bulk import and export of data.
             # However building this query for use with VALUES is somewhat convoluted.
             #
             # For exporting of data, which would be the equivalent of a SELECT query,
             # and given a simple query of the sort:
+            # ```
             #  SELECT * FROM table, (VALUES ?) AS ld(id) WHERE table.id = ld.id
+            # ```
+            #
             # and VALUES being an example of sequential numbers, 1-5 representing the 5
             # rows to retrieve, the "VALUES ?" clause needs to be expanded to
+            # ```
             #  VALUES (?), (?), (?), (?), (?)
+            # ```
+            #
             # Then, the values themselves have to be flattened in a similar fashion
+            # ```
             #  [(1, 2, 3, 4, 5)]
+            # ```
+            #
             # Similarly, disregarding that the WHERE clause will no longer hold true, if
             # the count VALUES to be passed were 3, then VALUES clause would expand to:
+            # ```
             #  VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)
-            # and for berevity assume that all passed values were actually the same, the
+            # ```
+            #
+            # and for brevity assume that all passed values were actually the same, the
             # values would be flattened to look like:
+            # ```
             #  [(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5)]
+            # ```
 
             value_str = "(" + ", ".join("?" for _ in next(iter(values))) + ")"
             sql = sql.replace("?", ", ".join(value_str for _ in values))
@@ -553,7 +574,7 @@ class LoggingTransaction:
         self, sql: str, args: Iterable[Any], values: Iterable[Iterable[Any]]
     ) -> None:
         """
-        Corresponds to a PostgreSQL COPY (...) FROM STDIN call using psycopg v3
+        Corresponds to a PostgreSQL `COPY (...) FROM STDIN` call using psycopg v3
         attributes and helpers.
 
         Note that COPY commands do not have an INSERT INTO or similar, merely the
@@ -1391,7 +1412,7 @@ class DatabasePool:
             )
             txn.copy_write(sql, (), values)
 
-        else:
+        elif isinstance(txn.database_engine, Sqlite3Engine):
             sql = "INSERT INTO %s (%s) VALUES(%s)" % (
                 table,
                 ", ".join(k for k in keys),
@@ -1399,6 +1420,10 @@ class DatabasePool:
             )
 
             txn.execute_batch(sql, values)
+
+        else:
+            # mypy does not like that self.database_engine is not a Never type
+            assert_never(txn.database_engine)  # type: ignore[arg-type]
 
     async def simple_upsert(
         self,
@@ -2016,7 +2041,7 @@ class DatabasePool:
             if allow_none:
                 return None
             else:
-                raise StoreError(404, "No row found")
+                raise StoreError(404, f"No row found ({table})")
 
     @staticmethod
     def simple_select_onecol_txn(
@@ -2631,6 +2656,7 @@ class DatabasePool:
 
             txn.execute_values(sql, values, fetch=False)
         else:
+            # FIXME(psycopg): rework into using `execute_values()` once it is ready
             sql = "DELETE FROM %s WHERE (%s) = (%s)" % (
                 table,
                 ", ".join(k for k in keys),

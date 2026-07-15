@@ -24,6 +24,11 @@ poetry run update_synapse_database --database-config .ci/sqlite-config.yaml --ru
 # Create the PostgreSQL database.
 psql -c "CREATE DATABASE synapse"
 
+echo "--- Inject specific postgres driver into config"
+# The driver variable should be set by CI, but just in case have a default so nothing breaks. The actual value does not
+# require quotes in the configuration file.
+sed -i -e "s/name: \"psycopg2\"/name: \"${SYNAPSE_POSTGRES_DRIVER:-psycopg2}\"/" .ci/postgres-config.yaml
+
 echo "+++ Run synapse_port_db against test database"
 # TODO: this invocation of synapse_port_db (and others below) used to be prepended with `coverage run`,
 # but coverage seems unable to find the entrypoints installed by `pip install -e .`.
@@ -54,7 +59,7 @@ poetry run synapse_port_db --sqlite-database .ci/test_db.db --postgres-config .c
 
 echo "--- Create a brand new postgres database from schema"
 cp .ci/postgres-config.yaml .ci/postgres-config-unported.yaml
-sed -i -e 's/database: synapse/database: synapse_unported/' .ci/postgres-config-unported.yaml
+sed -i -e 's/dbname: synapse/dbname: synapse_unported/' .ci/postgres-config-unported.yaml
 psql -c "CREATE DATABASE synapse_unported"
 poetry run update_synapse_database --database-config .ci/postgres-config-unported.yaml --run-background-updates
 

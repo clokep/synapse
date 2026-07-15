@@ -132,7 +132,7 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
 
             sql = f"""
                 CREATE TABLE IF NOT EXISTS {TEMP_TABLE}_position (
-                    position TEXT NOT NULL
+                    position BIGINT NOT NULL
                 )
             """
             txn.execute(sql)
@@ -695,80 +695,84 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
                 keyvalues={},
             )
 
-        if isinstance(self.database_engine, PostgresEngine):
+        if isinstance(self.database_engine, Psycopg2Engine):
             # We weight the localpart most highly, then display name and finally
             # server name
-
-            if isinstance(self.database_engine, Psycopg2Engine):
-                # `execute_values()` is the performative go-to with psycopg2. It differs
-                # from psycopg(v3+) below in that the `template` needs to be separated
-                # from the query itself so that the value variables can be bound and
-                # expanded before being inserted into the final query.
-                template = """
-                    (
-                        %s,
-                        setweight(to_tsvector('simple', %s), 'A')
-                        || setweight(to_tsvector('simple', %s), 'D')
-                        || setweight(to_tsvector('simple', COALESCE(%s, '')), 'B')
-                    )
-                """
-
-                sql = """
-                        INSERT INTO user_directory_search(user_id, vector)
-                        VALUES ? ON CONFLICT (user_id) DO UPDATE SET vector=EXCLUDED.vector
-                    """
-
-                txn.execute_values(
-                    sql,
-                    [
-                        (
-                            p.user_id,
-                            get_localpart_from_id(p.user_id),
-                            get_domain_from_id(p.user_id),
-                            (
-                                _filter_text_for_index(p.display_name)
-                                if p.display_name
-                                else None
-                            ),
-                        )
-                        for p in profiles
-                    ],
-                    template=template,
-                    fetch=False,
+            #
+            # `execute_values()` is the performative go-to with psycopg2. It differs
+            # from psycopg(v3+) below in that the `template` needs to be separated
+            # from the query itself so that the value variables can be bound and
+            # expanded before being inserted into the final query.
+            template = """
+                (
+                    %s,
+                    setweight(to_tsvector('simple', %s), 'A')
+                    || setweight(to_tsvector('simple', %s), 'D')
+                    || setweight(to_tsvector('simple', COALESCE(%s, '')), 'B')
                 )
-            elif isinstance(self.database_engine, PsycopgEngine):
-                # Unlike psycopg2, psycopg(v3+) can not use `execute_values()` at this
-                # time. However, `executemany()` on psycopg uses it's internal pipeline
-                # mode to be much faster than an iterative `execute()`, especially on
-                # writes.
-                sql = """
+            """
+
+            sql = """
                     INSERT INTO user_directory_search(user_id, vector)
-                    VALUES
-                    (
-                        ?,
-                        setweight(to_tsvector('simple', ?), 'A')
-                        || setweight(to_tsvector('simple', ?), 'D')
-                        || setweight(to_tsvector('simple', COALESCE(?, '')), 'B')
-                    )
-                    ON CONFLICT (user_id) DO UPDATE SET vector=EXCLUDED.vector
+                    VALUES ? ON CONFLICT (user_id) DO UPDATE SET vector=EXCLUDED.vector
                 """
 
-                txn.executemany(
-                    sql,
-                    [
+            txn.execute_values(
+                sql,
+                [
+                    (
+                        p.user_id,
+                        get_localpart_from_id(p.user_id),
+                        get_domain_from_id(p.user_id),
                         (
-                            p.user_id,
-                            get_localpart_from_id(p.user_id),
-                            get_domain_from_id(p.user_id),
-                            (
-                                _filter_text_for_index(p.display_name)
-                                if p.display_name
-                                else None
-                            ),
-                        )
-                        for p in profiles
-                    ],
+                            _filter_text_for_index(p.display_name)
+                            if p.display_name
+                            else None
+                        ),
+                    )
+                    for p in profiles
+                ],
+                template=template,
+                fetch=False,
+            )
+        elif isinstance(self.database_engine, PsycopgEngine):
+            # We weight the localpart most highly, then display name and finally
+            # server name
+            #
+            # Unlike psycopg2, psycopg(v3+) can not use `execute_values()` at this
+            # time. However, `executemany()` on psycopg uses it's internal pipeline
+            # mode to be much faster than an iterative `execute()`, especially on
+            # writes.
+            # FIXME(psycopg): once a more performative method is established, switch
+            #  away from `executemany()` for this `UPSERT`.
+            sql = """
+                INSERT INTO user_directory_search(user_id, vector)
+                VALUES
+                (
+                    ?,
+                    setweight(to_tsvector('simple', ?), 'A')
+                    || setweight(to_tsvector('simple', ?), 'D')
+                    || setweight(to_tsvector('simple', COALESCE(?, '')), 'B')
                 )
+                ON CONFLICT (user_id) DO UPDATE SET vector=EXCLUDED.vector
+            """
+
+            txn.executemany(
+                sql,
+                [
+                    (
+                        p.user_id,
+                        get_localpart_from_id(p.user_id),
+                        get_domain_from_id(p.user_id),
+                        (
+                            _filter_text_for_index(p.display_name)
+                            if p.display_name
+                            else None
+                        ),
+                    )
+                    for p in profiles
+                ],
+            )
         elif isinstance(self.database_engine, Sqlite3Engine):
             values = []
             for p in profiles:

@@ -13,7 +13,7 @@ database:
     user: postgres
     host: localhost
     password: postgres
-    database: synapse
+    dbname: synapse
 
 # Suppress the key server warning.
 trusted_key_servers: []

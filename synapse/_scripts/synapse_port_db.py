@@ -1170,7 +1170,7 @@ class Porter:
         def r(txn: LoggingTransaction) -> None:
             assert curr_id is not None
             next_id = curr_id + 1
-            txn.execute("ALTER SEQUENCE state_group_id_seq RESTART WITH %s", (next_id,))
+            txn.execute("SELECT setval('state_group_id_seq', %s, false)", (next_id,))
 
         await self.postgres_store.db_pool.runInteraction("setup_state_group_id_seq", r)
 
@@ -1181,7 +1181,7 @@ class Porter:
 
         def r(txn: LoggingTransaction) -> None:
             next_id = curr_id + 1
-            txn.execute("ALTER SEQUENCE user_id_seq RESTART WITH %s", (next_id,))
+            txn.execute("SELECT setval('user_id_seq', %s, false)", (next_id,))
 
         await self.postgres_store.db_pool.runInteraction("setup_user_id_seq", r)
 
@@ -1204,13 +1204,13 @@ class Porter:
         def _setup_events_stream_seqs_set_pos(txn: LoggingTransaction) -> None:
             if curr_forward_id:
                 txn.execute(
-                    "ALTER SEQUENCE events_stream_seq RESTART WITH %s",
+                    "SELECT setval('events_stream_seq', %s, false)",
                     (curr_forward_id + 1,),
                 )
 
             if curr_backward_id:
                 txn.execute(
-                    "ALTER SEQUENCE events_backfill_stream_seq RESTART WITH %s",
+                    "SELECT setval('events_backfill_stream_seq', %s, false)",
                     (curr_backward_id + 1,),
                 )
 
@@ -1241,8 +1241,8 @@ class Porter:
         next_id = max(current_stream_ids) + 1
 
         def r(txn: LoggingTransaction) -> None:
-            sql = "ALTER SEQUENCE %s RESTART WITH" % (sequence_name,)
-            txn.execute(sql + " %s", (next_id,))
+            sql = "SELECT setval('%s'," % (sequence_name,)
+            txn.execute(sql + " %s, false)", (next_id,))
 
         await self.postgres_store.db_pool.runInteraction(
             "_setup_%s" % (sequence_name,), r
@@ -1272,8 +1272,8 @@ class Porter:
             return
 
         def r(txn: LoggingTransaction) -> None:
-            sql = "ALTER SEQUENCE %s RESTART WITH" % (seq_name,)
-            txn.execute(sql + " %s", (seq_value + 1,))
+            sql = "SELECT setval('%s'," % (seq_name,)
+            txn.execute(sql + " %s, false)", (seq_value + 1,))
 
         await self.postgres_store.db_pool.runInteraction("_setup_%s" % (seq_name,), r)
 
@@ -1305,7 +1305,7 @@ class Porter:
             # Presumably there is at least one row in event_auth_chains.
             assert curr_chain_id is not None
             txn.execute(
-                "ALTER SEQUENCE event_auth_chain_id RESTART WITH %s",
+                "SELECT setval('event_auth_chain_id', %s, false)",
                 (curr_chain_id + 1,),
             )
 
@@ -1557,7 +1557,7 @@ def main() -> None:
         sys.stderr.write("Malformed database config: no 'name'\n")
         sys.exit(2)
     if postgres_config["name"] not in ("psycopg", "psycopg2"):
-        sys.stderr.write("Database must use the 'psycopg2' connector.\n")
+        sys.stderr.write("Database must use the 'psycopg' or 'psycopg2' connector.\n")
         sys.exit(3)
 
     # Don't run the background tasks that get started by the data stores.
