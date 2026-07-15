@@ -1557,7 +1557,7 @@ def main() -> None:
         sys.stderr.write("Malformed database config: no 'name'\n")
         sys.exit(2)
     if postgres_config["name"] not in ("psycopg", "psycopg2"):
-        sys.stderr.write("Database must use the 'psycopg2' connector.\n")
+        sys.stderr.write("Database must use the 'psycopg' or 'psycopg2' connector.\n")
         sys.exit(3)
 
     # Don't run the background tasks that get started by the data stores.

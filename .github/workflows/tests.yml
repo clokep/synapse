@@ -696,7 +696,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: "2.4.1"
-          extras: "postgres"
+          extras: "postgres psycopg"
       - run: .ci/scripts/test_synapse_port_db.sh
         id: run_tester_script
         env:
