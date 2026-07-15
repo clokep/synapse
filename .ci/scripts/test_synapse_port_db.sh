@@ -59,7 +59,7 @@ poetry run synapse_port_db --sqlite-database .ci/test_db.db --postgres-config .c
 
 echo "--- Create a brand new postgres database from schema"
 cp .ci/postgres-config.yaml .ci/postgres-config-unported.yaml
-sed -i -e 's/database: synapse/database: synapse_unported/' .ci/postgres-config-unported.yaml
+sed -i -e 's/dbname: synapse/dbname: synapse_unported/' .ci/postgres-config-unported.yaml
 psql -c "CREATE DATABASE synapse_unported"
 poetry run update_synapse_database --database-config .ci/postgres-config-unported.yaml --run-background-updates
 
